@@ -1,18 +1,25 @@
+
+/*
+ * gcc -Wall -o avgimg `pkg-config --cflags --libs MagickWand` avgimg.c
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
 
-
 #include <wand/MagickWand.h>
+
 
 #define N_BINS      (16)
 #define LOG_N_BINS  (4)   // base 2
-#define SCALE(p,d)  (((uint32_t) p) >> (d - LOG_N_BINS))
+#define PX_TO_BIN(p,d)  (((uint32_t) p) >> (d - LOG_N_BINS))
+#define BIN_TO_PX(b,d)  (((uint32_t) b) << (d - LOG_N_BINS))
 #define PS_RED      (0)
 #define PS_GREEN    (1)
 #define PS_BLUE     (2)
+
 
 typedef struct _pixelstat_t {
     uint16_t count;
@@ -20,6 +27,7 @@ typedef struct _pixelstat_t {
     double min[3], max[3];
     uint16_t hist[3][N_BINS];
 } pixelstat_t;
+
 
 static inline void update_stats(pixelstat_t *p,
         const unsigned int depth,
@@ -47,9 +55,9 @@ static inline void update_stats(pixelstat_t *p,
     if (b > p->max[PS_BLUE])
         p->max[PS_BLUE ] = b;
     
-    p->hist[PS_RED  ][SCALE(r, depth)] += 1;
-    p->hist[PS_GREEN][SCALE(g, depth)] += 1;
-    p->hist[PS_BLUE ][SCALE(b, depth)] += 1;
+    p->hist[PS_RED  ][PX_TO_BIN(r, depth)] += 1;
+    p->hist[PS_GREEN][PX_TO_BIN(g, depth)] += 1;
+    p->hist[PS_BLUE ][PX_TO_BIN(b, depth)] += 1;
 }
 
 static inline void init_stats(pixelstat_t *p) {
@@ -66,18 +74,20 @@ static inline void init_stats(pixelstat_t *p) {
 
 static void average_stats(pixelstat_t *p) {
     if (p->count > 0) {
-        int i, j;
+        int i;
     
         for (i = 0; i < 3; ++i) {
             p->sum[i] /= (double) p->count;
             p->gsum[i] = __exp10(p->gsum[i] / ((double)p->count));
 
+            /*
             for (j = 0; j < N_BINS; ++j) {
                 p->hist[i][j] = (
                     (((double)p->hist[i][j]) * 1000.0) 
                         / ((double) p->count)
                 );
             }
+            */
         }
     }
 }
@@ -132,6 +142,21 @@ static void pixel_max(MagickPixelPacket *pixel, pixelstat_t *stats) {
     pixel->blue  = stats->max[PS_BLUE];
 }
 
+static void pixel_diff(MagickPixelPacket *pixel, pixelstat_t *stats) {
+    pixel->red   = stats->max[PS_RED]   - stats->min[PS_RED];
+    pixel->green = stats->max[PS_GREEN] - stats->min[PS_GREEN];
+    pixel->blue  = stats->max[PS_BLUE]  - stats->min[PS_BLUE];
+}
+
+static unsigned int selected_bin = 0;
+static void pixel_bin(MagickPixelPacket *pixel, pixelstat_t *stats) {
+    double base  = (1 << pixel->depth) - 1; //BIN_TO_PX(selected_bin, pixel->depth);
+    double count = stats->count;
+    pixel->red      = (base * stats->hist[PS_RED  ][selected_bin]) / count;
+    pixel->green    = (base * stats->hist[PS_GREEN][selected_bin]) / count;
+    pixel->blue     = (base * stats->hist[PS_BLUE ][selected_bin]) / count;
+}
+
 static void generate_and_save(const char *prefix, const char *name, MagickWand *wand, pixelstat_t *stats, void (*f)(MagickPixelPacket *, pixelstat_t *)) {
     PixelIterator *iter = NewPixelIterator(wand);
     unsigned int width = MagickGetImageWidth(wand); 
@@ -159,6 +184,13 @@ static void generate_and_save(const char *prefix, const char *name, MagickWand *
     save_wand(prefix, name, wand);
 }
 
+static void output_usage(const char *name)
+{
+    fprintf(stdout, 
+        "Usage: [-b] %s <out> <in0> [<in1> ...]\n", 
+        name);
+}
+
 int main(int argc, char **argv)
 {
     const char *prefix = NULL;
@@ -167,17 +199,24 @@ int main(int argc, char **argv)
     pixelstat_t *stats;
     unsigned int width, height, n_pixels;
     unsigned int i, x, y;
+    int output_bins = 0;
     int file_n = 2;
 
-    if (argc < 3)
-    {
-        fprintf(stdout, 
-            "Usage: %s <out> <in0> [<in1> ...]\n", 
-            argv[0]);
+    if (argc < 3) {
+        output_usage(argv[0]);
         exit(1);
     }
 
-    prefix = argv[1];
+    if (strcmp(argv[1], "-b") == 0) {
+        output_bins = 1;
+        if (argc < 4) {
+            output_usage(argv[0]);
+            exit(1);
+        }
+        prefix = argv[2];
+    } else {
+        prefix = argv[1];
+    }
 
     MagickWandGenesis();
     
@@ -257,7 +296,16 @@ int main(int argc, char **argv)
     generate_and_save(prefix, "geoavg", output_wand, stats, pixel_geoavg);
     generate_and_save(prefix, "min", output_wand, stats, pixel_min);
     generate_and_save(prefix, "max", output_wand, stats, pixel_max);
-    
+    generate_and_save(prefix, "diff", output_wand, stats, pixel_diff);
+    if (output_bins) {
+        for (i = 0; i < 16; ++i) {
+            char name[8];
+            snprintf(name, sizeof(name), "bin%02d", i);
+            selected_bin = i;
+            generate_and_save(prefix, name, output_wand, stats, pixel_bin);
+        }
+    }
+
     free(stats);
     DestroyMagickWand(output_wand);
     MagickWandTerminus();
