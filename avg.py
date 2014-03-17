@@ -40,12 +40,14 @@ def fp_cache_save(path):
         if f.startswith(path):
             k = f[len(path):len(f)]
             data[k] = fp
-    pickle.dump(os.path.join(path, 'fp_cache'), data)
+    with open(os.path.join(path, 'fp_cache'), 'wb') as f:
+        pickle.dump(data, f)
 
 def fp_cache_load(path):
     global FP_CACHE
     if os.path.exists(os.path.join(path, 'fp_cache')):
-        data = pickle.load(os.path.join(path, 'fp_cache'))
+        with open(os.path.join(path, 'fp_cache'), 'rb') as f:
+            data = pickle.load(f)
         for (k, fp) in FP_CACHE.items():
             FP_CACHE[os.path.join(path, k)] = fp
 
@@ -285,7 +287,7 @@ def measure_day(path, day, prev=None, img_type='geoavg-eq', period='day'):
         'prev': diff_prev,
         '5day': diff_5day,
         'month': diff_month
-    };
+    }
 
 def find_files(path):
     file_re = re.compile(r'\d{12}\.jpg')
@@ -309,7 +311,7 @@ def measure_days(days, dst_path):
         else:
             prev_day = None
 
-        for measure in ['geoavg-eq', 'min-eq', 'min-gray-eq']:
+        for measure in ['geoavg-eq', 'min-eq', 'min-gray-eq', 'raw-geoavg']:
             day_results[measure] = measure_day(dst_path, day, prev=prev_day, img_type=measure)
 
     return data
@@ -334,7 +336,9 @@ def main(args):
         reprocess_averages(mtimes, dst_path)
         days = day_list(mapping)
         data = measure_days(days, dst_path)
-        pickle.dump(data, os.path.join(dst_path, 'data'))
+        
+        with open(os.path.join(dst_path, 'measures'), 'wb') as f:
+            pickle.dump(data, f)
 
         fp_cache_save(dst_path)
 
