@@ -2,12 +2,70 @@
 
 import astral
 import datetime
+import math
 import os, os.path
 import re
+import pickle
 import subprocess
 import sys
 
 AVGIMG = 'avgimg'
+FP_CACHE = {}
+
+def _fingerprint(path):
+    print 'fingerprint', path
+    ppm = subprocess.check_output(['convert', path, '-gravity', 'center', '-crop', '80%', '-scale', '3x3!', '-compress', 'none', '-depth', '16', 'ppm:'])
+    lines = ppm.split("\n")
+    raw = (" ".join(lines[3:len(lines)])).split(" ")
+    data = []
+    for v in raw:
+        if len(v) > 0:
+            data.append(int(v))
+    return tuple(data)
+
+def cache_invalidate(path):
+    global FP_CACHE
+    del FP_CACHE[path]
+
+def fingerprint(path):
+    global FP_CACHE
+    if path not in FP_CACHE:
+        FP_CACHE[path] = _fingerprint(path)    
+    return FP_CACHE[path]
+
+def fp_cache_save(path):
+    global FP_CACHE
+    data = {}
+    for (f, fp) in FP_CACHE.items():
+        if f.startswith(path):
+            k = f[len(path):len(f)]
+            data[k] = fp
+    pickle.dump(os.path.join(path, 'fp_cache'), data)
+
+def fp_cache_load(path):
+    global FP_CACHE
+    if os.path.exists(os.path.join(path, 'fp_cache')):
+        data = pickle.load(os.path.join(path, 'fp_cache'))
+        for (k, fp) in FP_CACHE.items():
+            FP_CACHE[os.path.join(path, k)] = fp
+
+def fp_tone(fp):
+    s = [ 0.0, 0.0, 0.0 ]
+    c = 0.0
+    for i in range(0, len(fp), 3):
+        s[0] += fp[i + 0]
+        s[1] += fp[i + 1]
+        s[2] += fp[i + 2]
+        c += 1.0
+    for i in range(len(s)):
+        s[i] /= c
+    return s
+
+def rsd(a, b):
+    d = 0.0
+    for i in range(min(len(a), len(b))):
+        d += (float(a[i]) - float(b[i])) ** 2
+    return math.sqrt(d)
 
 def fn_to_date(fn):
     year = int(fn[0:2]) + 2000
@@ -36,16 +94,16 @@ def day_period(aloc, date):
         return 'day'
 
 def dt_string(date):
-    return "%02d%02d%02d%02d%02d%02d" % (
+    return "%04d%02d%02d%02d%02d%02d" % (
         date.year, date.month, date.day, 
         date.hour, date.minute, date.second
     )
 
 def day_string(date):
-    return "%02d%02d%02d" % (date.year, date.month, date.day)
+    return "%04d%02d%02d" % (date.year, date.month, date.day)
 
 def month_string(date):
-    return "%02d%02d" % (date.year, date.month)
+    return "%04d%02d" % (date.year, date.month)
 
 def build_mapping(aloc, src_path, dst_path, files):
     mapping = {}
@@ -101,6 +159,7 @@ def generate_base_img(dst_path, details, img_type):
     else:
         assert(0)
     d[img_type + '_mtime'] = os.path.getmtime(dst)
+    cache_invalidate(dst)
 
 def preprocess(mapping, dst):
     for (fn, d) in mapping.items():
@@ -122,6 +181,8 @@ def preprocess(mapping, dst):
 
 def generate_average(dst, path, srcs, label='raw'):
     subprocess.call([AVGIMG, os.path.join(dst, path, label)] + srcs)
+    for ext in ['avg', 'geoavg', 'min', 'max', 'diff']:
+        cache_invalidate(os.path.join(dst, path, label + '-' + ext + '.png'))
 
 def build_averages(averages, dst, img_type='ld'):
     result = {}
@@ -165,33 +226,31 @@ def reprocess_averages(averages, dst):
                 if (not os.path.exists(fpath)) or (mtime > os.path.getmtime(fpath)):
                     print 'generate', os.path.join(path, fn)
                     subprocess.call(['convert', src] + opts + [fpath])
+                    cache_invalidate(fpath)
 
-def fingerprint(path):
-    ppm = subprocess.check_output(['convert', path, '-gravity', 'center', '-crop', '80%', '-scale', '3x3!', '-compress', 'none', '-depth', '16', 'ppm:'])
-    lines = ppm.split("\n")
-    raw = (" ".join(lines[3:len(lines)])).split(" ")
-    data = []
-    for v in raw:
-        if len(v) > 0:
-            data.append(int(v))
-    return data
-
-def rsd(a, b):
-    d = 0.0
-    for i in range(min(len(a), len(b))):
-        d += (float(a[i]) - float(b[i])) ** 2
-    return math.sqrt(d)
-
-def comparison(src, dst):
+def difference(src, dst):
+    print 'difference', src, dst
     result = {}
+    src_fp = fingerprint(src)
+    dst_fp = fingerprint(dst)
+    result['3x3'] = rsd(src_fp, dst_fp)
+
     for metric in ['MSE', 'PSNR']:
-        vsl = subprocess.check_output(['compare', '-metric', metric, src, dst, 'null:'])
-        m = re.match(r'.*\((.+)\)')
+        try:
+            vsl = subprocess.check_output(
+                ['compare', '-metric', metric, src, dst, 'null:'],
+                stderr=subprocess.STDOUT)
+        except (subprocess.CalledProcessError) as e:
+            vsl = e.output
+
+        m = re.match(r'.*\((.+)\).*', vsl)
         if m:
             v = float(m.group(1))
         else:
             v = float(vsl)
+        
         result[metric] = v
+
     return result
 
 def day_list(mapping):
@@ -200,10 +259,33 @@ def day_list(mapping):
         days[d['day']] = True
     return sorted(days.keys())
 
-def measure_day(path, day, img_type):
-    # get tone measures
-    # compare to: previous day, 5-day window, month
-    pass
+def measure_day(path, day, prev=None, img_type='geoavg-eq', period='day'):
+    print 'measure', day, img_type
+
+    day_src = os.path.join(path, 'avg', 'day', day, period, img_type + '.png') 
+    if prev:
+        prev_src = os.path.join(path, 'avg', 'day', prev, period, img_type + '.png')
+    _5day_src = os.path.join(path, 'avg', '5day', day, period, img_type + '.png') 
+    month_src = os.path.join(path, 'avg', 'month', day[0:6], period, img_type + '.png')
+
+    fp = fingerprint(day_src)
+    tone = fp_tone(fp)
+
+    if prev:
+        diff_prev = difference(prev_src, day_src)
+    else:
+        diff_prev = None
+    
+    diff_5day = difference(_5day_src, day_src)
+    diff_month = difference(month_src, day_src)
+
+    return {
+        'fp': fp,
+        'tone': tone,
+        'prev': diff_prev,
+        '5day': diff_5day,
+        'month': diff_month
+    };
 
 def find_files(path):
     file_re = re.compile(r'\d{12}\.jpg')
@@ -215,6 +297,23 @@ def find_files(path):
             files.append(fn)
     return files
 
+def measure_days(days, dst_path):
+    data = {}
+
+    for i in range(len(days)):
+        day = days[i]
+        data[day] = day_results = {}
+
+        if i > 0:
+            prev_day = days[i - 1]
+        else:
+            prev_day = None
+
+        for measure in ['geoavg-eq', 'min-eq', 'min-gray-eq']:
+            day_results[measure] = measure_day(dst_path, day, prev=prev_day, img_type=measure)
+
+    return data
+
 def main(args):
     aloc = astral.Astral()['London']
     # modify for University of Kent, Canterbury
@@ -225,12 +324,20 @@ def main(args):
     if len(args) == 2:
         src_path = args[0]
         dst_path = args[1]
+        
         files = find_files(src_path)
-
+        fp_cache_load(dst_path)
+        
         (mapping, averages) = build_mapping(aloc, src_path, dst_path, files)
         preprocess(mapping, dst_path)
         mtimes = build_averages(averages, dst_path)
         reprocess_averages(mtimes, dst_path)
+        days = day_list(mapping)
+        data = measure_days(days, dst_path)
+        pickle.dump(data, os.path.join(dst_path, 'data'))
+
+        fp_cache_save(dst_path)
+
     else:
         print 'avg <src> <dst>'
 
