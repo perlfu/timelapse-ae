@@ -29,6 +29,13 @@ def select_values(data, days, measure, metric):
                 ys[s].append(0.0)
     return ys
 
+def select_tones(data, days, measure):
+    ys = []
+    for day in days:
+        tone = data[day][measure]['tone']
+        ys.append((tone[0] / 65535.0, tone[1] / 65535.0, tone[2] / 65535.0))
+    return ys
+
 def pick_colour(cmap, n):
     return cmap(n)
 
@@ -54,6 +61,25 @@ def plot_values(pages, label, days, ys):
     plt.grid(b=True, which='both', color='0.75', linestyle='-')
     fig.savefig(pages, format='pdf', dpi=300)
 
+def plot_tones(pages, label, days, ys):
+    print 'plot', label
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    xs = range(len(days))
+    ticks = range(0, len(days), 3)
+    tick_labels = []
+    for idx in ticks:
+        tick_labels.append(days[idx])
+    
+    ax.bar(xs, ([1.0] * len(days)), alpha=1.0, color=ys, linewidth=0.0, width=1.0)
+    ax.set_xlim((xs[0], xs[-1]))
+    ax.set_ylim((0.0, 1.0))
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(tick_labels, rotation=90)
+    ax.set_title(label)
+    #plt.grid(b=True, which='both', color='0.75', linestyle='-')
+    fig.savefig(pages, format='pdf', dpi=300)
+
 def main(args):
     matplotlib.rc('xtick', labelsize=8)
 
@@ -70,8 +96,10 @@ def main(args):
             for m in METRICS:
                 ys = select_values(data, days, measure, m)
                 plot_values(pages, measure + ' ' + m, days, ys)
-    
-        # plot tone (in 3D?)
+
+        for measure in measures:
+            ys = select_tones(data, days, measure)
+            plot_tones(pages, measure + ' tone', days, ys)
 
         pages.close()
 
