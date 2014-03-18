@@ -25,7 +25,8 @@ def _fingerprint(path):
 
 def cache_invalidate(path):
     global FP_CACHE
-    del FP_CACHE[path]
+    if path in FP_CACHE:
+        del FP_CACHE[path]
 
 def fingerprint(path):
     global FP_CACHE
@@ -160,7 +161,7 @@ def generate_base_img(dst_path, details, img_type):
         subprocess.call(['convert', src, '-adaptive-resize', '1920', dst])
     else:
         assert(0)
-    d[img_type + '_mtime'] = os.path.getmtime(dst)
+    details[img_type + '_mtime'] = os.path.getmtime(dst)
     cache_invalidate(dst)
 
 def preprocess(mapping, dst):
