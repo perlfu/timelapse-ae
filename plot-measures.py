@@ -21,12 +21,21 @@ def select_values(data, days, measure, metric):
     ys = {}
     for s in SERIES:
         ys[s] = []
+    ys['avg'] = []
+
     for day in days:
         for s in SERIES:
             if (s in data[day][measure]) and data[day][measure][s]:
                 ys[s].append(data[day][measure][s][metric])
             else:
                 ys[s].append(0.0)
+    
+    for i in range(len(days)):
+        _sum = 0.0
+        for s in SERIES:
+            _sum += ys[s][i]
+        ys['avg'].append(_sum / float(len(SERIES)))
+
     return ys
 
 def select_tones(data, days, measure):
@@ -57,7 +66,7 @@ def plot_values(pages, label, days, ys):
     ax.set_xticks(ticks)
     ax.set_xticklabels(tick_labels, rotation=90)
     ax.set_title(label)
-    ax.legend(ncol=3, loc='lower right')
+    ax.legend(ncol=len(ys.keys()), loc='lower right')
     plt.grid(b=True, which='both', color='0.75', linestyle='-')
     fig.savefig(pages, format='pdf', dpi=300)
 
