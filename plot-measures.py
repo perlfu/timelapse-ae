@@ -48,6 +48,12 @@ def select_tones(data, days, measure):
 def pick_colour(cmap, n):
     return cmap(n)
 
+def filter_series(ys, picks):
+    result = {}
+    for p in picks:
+        result[p] = ys[p]
+    return result
+
 def plot_values(pages, label, days, ys):
     print 'plot', label
     cmap = plt.cm.Paired
@@ -105,6 +111,9 @@ def main(args):
             for m in METRICS:
                 ys = select_values(data, days, measure, m)
                 plot_values(pages, measure + ' ' + m, days, ys)
+                for s in SERIES:
+                    filter_ys = filter_series(ys, [s, 'avg'])
+                    plot_values(pages, measure + ' ' + m + ' ' + s, days, filter_ys)
 
         for measure in measures:
             ys = select_tones(data, days, measure)
