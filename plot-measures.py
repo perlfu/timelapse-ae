@@ -4,6 +4,7 @@ import pickle
 import sys
 
 import numpy as np
+from scipy.stats.mstats import gmean
 
 import matplotlib
 matplotlib.use('Agg')
@@ -65,6 +66,13 @@ def plot_values(pages, label, days, ys):
     for idx in ticks:
         tick_labels.append(days[idx])
     
+    if 'avg' in ys:
+        m = np.mean(ys['avg'])
+        sd = np.std(ys['avg'])
+        ax.axhline(y=m, color='green')
+        ax.axhline(y=(m + sd * 1.0), color='pink')
+        ax.axhline(y=(m + sd * 2.0), color='red')
+
     for (i, k) in zip(np.linspace(0, 1.0, len(ys.keys())), ys.keys()):
         ax.scatter(xs, ys[k], alpha=0.9, label=k, color=pick_colour(cmap, i))
 
@@ -95,6 +103,37 @@ def plot_tones(pages, label, days, ys):
     #plt.grid(b=True, which='both', color='0.75', linestyle='-')
     fig.savefig(pages, format='pdf', dpi=300)
 
+def summarise_metric(ys):
+    flat = []
+    for s in SERIES:
+        flat += ys[s]
+    m = gmean(flat)
+    result = [0.0] * (len(flat) / len(SERIES))
+    for s in SERIES:
+        for i in range(len(result)):
+            result[i] += ys[s][i]
+    for i in range(len(result)):
+        result[i] /= float(len(SERIES))
+    return result
+
+def summarise_metrics(data, days, measure, metrics=METRICS):
+    values = []
+    lens = []
+    for m in metrics:
+        ys = select_values(data, days, measure, m)
+        summary = summarise_metric(ys)
+        values.append(summary)
+        lens.append(len(summary))
+
+    result = [0.0] * min(lens)
+    for v in values:
+        for i in range(len(result)):
+            result[i] += v[i]
+    for i in range(len(result)):
+        result[i] /= float(len(values))
+
+    return result
+
 def main(args):
     matplotlib.rc('xtick', labelsize=8)
 
@@ -108,12 +147,14 @@ def main(args):
         days = sorted(data.keys())
         measures = find_measures(data)
         for measure in measures:
-            for m in METRICS:
-                ys = select_values(data, days, measure, m)
-                plot_values(pages, measure + ' ' + m, days, ys)
-                for s in SERIES:
-                    filter_ys = filter_series(ys, [s, 'avg'])
-                    plot_values(pages, measure + ' ' + m + ' ' + s, days, filter_ys)
+            summary = summarise_metrics(data, days, measure, metrics=['3x3', 'MSE'])
+            plot_values(pages, measure + ' summary', days, {'avg': summary})
+            #for m in METRICS:
+            #    ys = select_values(data, days, measure, m)
+            #    plot_values(pages, measure + ' ' + m, days, ys)
+            #    for s in SERIES:
+            #        filter_ys = filter_series(ys, [s, 'avg'])
+            #        plot_values(pages, measure + ' ' + m + ' ' + s, days, filter_ys)
 
         for measure in measures:
             ys = select_tones(data, days, measure)
