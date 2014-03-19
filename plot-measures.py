@@ -111,7 +111,7 @@ def summarise_metric(ys):
     result = [0.0] * (len(flat) / len(SERIES))
     for s in SERIES:
         for i in range(len(result)):
-            result[i] += ys[s][i]
+            result[i] += ys[s][i] / m
     for i in range(len(result)):
         result[i] /= float(len(SERIES))
     return result
@@ -134,6 +134,85 @@ def summarise_metrics(data, days, measure, metrics=METRICS):
 
     return result
 
+def compute_energy(ys):
+    result = []
+    m = np.mean(ys)
+    sd = np.std(ys)
+    e = 0.0
+    for i in range(len(ys)):
+        v = (ys[i] - m) / sd
+        e = v
+        #e = (e * 0.7) + (v * 0.3)
+        if e < 0.0:
+            e = 0.0
+        elif e > 1.0:
+            e = 1.0
+        result.append(e)
+    return result
+
+def compute_energy3(ys):
+    result = []
+    m = np.mean(ys)
+    sd = np.std(ys)
+    e = 0.0
+    for i in range(len(ys)):
+        v = (ys[i] - m) / (1.5 * sd)
+        #if v < 0.5:
+        #    v = 0.0
+        e = (e * 0.7) + (v * 0.3)
+        if e < 0.0:
+            e = 0.0
+        elif e > 1.0:
+            e = 1.0
+        result.append(e)
+    return result
+
+def compute_energy2(ys):
+    result = []
+    m = np.mean(ys)
+    sd = np.std(ys)
+    e = 1.0
+    for i in range(len(ys)):
+        s = 0.0
+        for j in range(1, 30):
+            if (i + j) < len(ys):
+                s += ((ys[i + j] - m) / sd) * (1.0 / j)
+            else:
+                s += 1.0 * (1.0 / j)
+        e = (e * 0.95) + (s * 0.05)
+        if e < 0.0:
+            e = 0.0
+        elif e > 1.0:
+            e = 1.0
+        result.append(e)
+    return result
+
+def compute_energy4(ys):
+    e2 = compute_energy2(ys)
+    e3 = compute_energy3(ys)
+    result = []
+    for i in range(len(e2)):
+        v2 = e2[i] * 0.7
+        v3 = e3[i] * 0.3
+        if v2 >= 0.7:
+            result.append(v2 + v3)
+        else:
+            result.append(v2)
+    return result
+
+def diff_energy(ys):
+    result = []
+    e = 0.5
+    for i in range(len(ys)):
+        v = ys[i]
+        e = (e * 0.9) + (v * 0.1)
+        if e < 0.0:
+            e = 0.0
+        elif e > 1.0:
+            e = 1.0
+        result.append(e)
+    return result
+
 def main(args):
     matplotlib.rc('xtick', labelsize=8)
 
@@ -146,9 +225,18 @@ def main(args):
 
         days = sorted(data.keys())
         measures = find_measures(data)
+        output = { 'days': days, 'measures': measures }
         for measure in measures:
-            summary = summarise_metrics(data, days, measure, metrics=['3x3', 'MSE'])
+            output[measure] = result = {}
+            summary = summarise_metrics(data, days, measure)
+            #, metrics=['3x3', 'MSE'])
             plot_values(pages, measure + ' summary', days, {'avg': summary})
+            for (i,f) in zip(range(1,5), [compute_energy, compute_energy2, compute_energy3, compute_energy4]):
+                key = 'energy' + str(i)
+                energy = f(summary)
+                result[key] = energy
+                plot_values(pages, measure + ' ' + key, days, {'e': energy})
+
             #for m in METRICS:
             #    ys = select_values(data, days, measure, m)
             #    plot_values(pages, measure + ' ' + m, days, ys)
@@ -161,6 +249,12 @@ def main(args):
             plot_tones(pages, measure + ' tone', days, ys)
 
         pages.close()
+
+        if len(args) >= 3:
+            results_file = args[2]
+            print 'store data to', results_file
+            with open(results_file, 'wb') as f:
+                data = pickle.dump(output, f)            
 
 if __name__ == "__main__":
     main(sys.argv[1:])
