@@ -226,7 +226,16 @@ def reprocess_averages(averages, dst):
             gen = {
                 t + "-eq.png": ['-equalize'],
                 t + "-eq-gray.png": ['-equalize', '-separate', '-average'],
-                t + "-gray-eq.png": ['-separate', '-average', '-equalize']
+                t + "-gray-eq.png": ['-separate', '-average', '-equalize'],
+                t + "-gray-edges.png": [
+                    '-equalize', '-separate', '-average',
+                    '-scale', '128x128!', 
+                    '-median', '2',
+                    '-lat', '2x2-5%',
+                    '-negate', 
+                    '-colorspace', 'gray',
+                    '-blur', '0x1'
+                ]
             }
             for (fn, opts) in gen.items():
                 fpath = os.path.join(dst, path, fn)
@@ -324,7 +333,7 @@ def measure_days(days, dst_path):
         else:
             prev_day = None
 
-        for measure in ['geoavg-eq', 'min-eq', 'min-gray-eq', 'raw-geoavg']:
+        for measure in ['geoavg-eq', 'min-eq', 'min-gray-eq', 'raw-geoavg', 'min-gray-edges', 'geoavg-gray-edges']:
             day_results[measure] = measure_day(dst_path, day, prev=prev_day, img_type=measure)
 
     return data
