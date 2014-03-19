@@ -14,14 +14,18 @@ FP_CACHE = {}
 
 def _fingerprint(path):
     print 'fingerprint', path
-    ppm = subprocess.check_output(['convert', path, '-gravity', 'center', '-crop', '80%', '-scale', '3x3!', '-compress', 'none', '-depth', '16', 'ppm:'])
-    lines = ppm.split("\n")
-    raw = (" ".join(lines[3:len(lines)])).split(" ")
-    data = []
-    for v in raw:
-        if len(v) > 0:
-            data.append(int(v))
-    return tuple(data)
+    if os.path.exists(path):
+        ppm = subprocess.check_output(['convert', path, '-gravity', 'center', '-crop', '80%', '-scale', '3x3!', '-compress', 'none', '-depth', '16', 'ppm:'])
+        lines = ppm.split("\n")
+        raw = (" ".join(lines[3:len(lines)])).split(" ")
+        data = []
+        for v in raw:
+            if len(v) > 0:
+                data.append(int(v))
+        return tuple(data)
+    else:
+        print '! missing', path
+        return tuple([0] * 27)
 
 def cache_invalidate(path):
     global FP_CACHE
@@ -233,7 +237,15 @@ def reprocess_averages(averages, dst):
 
 def difference(src, dst):
     print 'difference', src, dst
-    result = {}
+    result = { '3x3': 0.0, 'MSE': 0.0, 'PSNR': 0.0 }
+
+    if not os.path.exists(src):
+        print "! missing", src
+        return result
+    if not os.path.exists(dst):
+        print "! missing", dst
+        return result
+    
     src_fp = fingerprint(src)
     dst_fp = fingerprint(dst)
     result['3x3'] = rsd(src_fp, dst_fp)
