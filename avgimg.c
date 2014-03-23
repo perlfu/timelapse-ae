@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <assert.h>
 
 #include <wand/MagickWand.h>
 
@@ -92,6 +93,15 @@ static void average_stats(pixelstat_t *p) {
     }
 }
 
+static void average_stats_with_count(pixelstat_t *p, const double count) {
+    int i;
+
+    for (i = 0; i < 3; ++i) {
+        p->sum[i] /= count;
+        p->gsum[i] = __exp10(p->gsum[i] / count);
+    }
+}
+
 static void wand_exception(MagickWand *wand) {
     ExceptionType severity;
     char *description = MagickGetException(wand, &severity);
@@ -104,9 +114,17 @@ static void wand_exception(MagickWand *wand) {
 static void save_wand(const char *prefix, const char *name, MagickWand *wand)
 {
     MagickBooleanType status;
-    unsigned int buflen = strlen(prefix) + strlen(name) + 8;
-    char *buf = (char *) malloc(buflen + 8);
-    snprintf (buf, buflen, "%s-%s.png", prefix, name);
+    char *buf;
+    
+    if (prefix) {
+        unsigned int buflen = strlen(prefix) + strlen(name) + 8;
+        buf = (char *) malloc(buflen + 8);
+        snprintf (buf, buflen, "%s-%s.png", prefix, name);
+    } else {
+        unsigned int buflen = strlen(name) + 8;
+        buf = (char *) malloc(buflen + 8);
+        strcpy (buf, name);
+    }
     
     fprintf (stdout, "saving %s...\n", buf);
     status = MagickWriteImages(wand, buf, MagickTrue);
@@ -187,19 +205,41 @@ static void generate_and_save(const char *prefix, const char *name, MagickWand *
 static void output_usage(const char *name)
 {
     fprintf(stdout, 
-        "Usage: [-b] %s <out> <in0> [<in1> ...]\n", 
+        "Usage: %s [OPTION] <output> <input0> [<input1> ...]\n"
+        "\n"
+        "Where OPTION is one of:\n"
+        "  -b  output histographic bins\n"
+        "  -g  output only geometric mean image\n"
+        "  -m  output only arithmetic mean image\n"
+        "\n"
+        "Input files can be prefixed with a weight, e.g.\n"
+        "    avgimg -g out.png 0.2:in0.png 0.8:in1.png\n"
+        "\n",
         name);
 }
 
+static void usage(const char *name) {
+    output_usage(name);
+    exit(1);
+}
+
+#define X_TRUE 1
+#define X_FALSE 0
+
 int main(int argc, char **argv)
 {
+    const char *prog_name = argv[0];
     const char *prefix = NULL;
     MagickBooleanType status;
     MagickWand *output_wand;
     pixelstat_t *stats;
     unsigned int width, height, n_pixels;
     unsigned int i, x, y;
-    int output_bins = 0;
+    double weight_sum = 0.0;
+    int count = 0;
+    int output_bins = X_FALSE;
+    int output_only_gmean = X_FALSE;
+    int output_only_amean = X_FALSE;
     int file_n = 2;
 
     if (argc < 3) {
@@ -207,15 +247,35 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    if (strcmp(argv[1], "-b") == 0) {
-        output_bins = 1;
-        if (argc < 4) {
-            output_usage(argv[0]);
-            exit(1);
+    for (i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-b") == 0) {
+            output_bins = X_TRUE;
+        } else if (strcmp(argv[i], "-g") == 0) {
+            output_only_gmean = X_TRUE;
+        } else if (strcmp(argv[i], "-m") == 0) {
+            output_only_amean = X_TRUE;
+        } else if (strcmp(argv[i], "--") == 0) {
+            i++;
+            break;
+        } else if (argv[i][0] == '-') {
+            usage(prog_name);
+        } else {
+            break;
         }
-        prefix = argv[2];
+    }
+    file_n = i;
+
+    // need to have at least 2 arguments remaining
+    if (file_n > (argc - 2)) {
+        usage(prog_name);
     } else {
-        prefix = argv[1];
+        prefix = argv[file_n++];
+    }
+
+    // need to have consistent options
+    if ((output_bins + output_only_gmean + output_only_amean) > 1) {
+        fprintf (stdout, "inconsistent options\n");
+        usage(prog_name);
     }
 
     MagickWandGenesis();
@@ -239,9 +299,23 @@ int main(int argc, char **argv)
     // read input files
     while (file_n < argc) {
         const char *fn = argv[file_n];
+        const char *split = index(fn, ':');
+        double weight = 1.0;
         MagickWand *wand = NewMagickWand();
 
-        fprintf (stdout, "read: %s\n", fn);
+        // look for custom weight at the beginning 
+        if (split) {
+            char buffer[64];
+            int split_p = split - fn;
+
+            assert(split_p < sizeof(buffer));
+            strncpy(buffer, fn, split_p);
+            buffer[split_p] = '\0';
+            weight          = strtold(buffer, NULL);
+            fn              = split + 1;
+        }
+
+        fprintf (stdout, "read: %s (weight: %.5f)\n", fn, weight);
 
         status = MagickReadImage(wand, fn);
         if (status == MagickFalse)
@@ -261,13 +335,19 @@ int main(int argc, char **argv)
                 for (x = 0; x < row_width; ++x) {
                     MagickPixelPacket pixel;
                     PixelGetMagickColor(pixels[x], &pixel);
-                    update_stats(&(sp[x]), pixel.depth, pixel.red, pixel.green, pixel.blue);
+                    update_stats(&(sp[x]),
+                        pixel.depth,
+                        pixel.red * weight,
+                        pixel.green * weight,
+                        pixel.blue * weight);
                 }
 
                 sp += width;
             }
 
             DestroyPixelIterator(iter);
+            weight_sum += weight;
+            count += 1;
         } else {
             fprintf(stderr, "! input dimensions for %s (%ux%u) do not match output dimensions %ux%u; ignoring\n",
                 fn,
@@ -285,24 +365,36 @@ int main(int argc, char **argv)
     // compute output
     fprintf (stdout, "computing...\n");
     
-    for (i = 0; i < n_pixels; ++i) {
-        average_stats(&(stats[i]));
+    if (weight_sum != count) {
+        for (i = 0; i < n_pixels; ++i) {
+            average_stats_with_count(&(stats[i]), weight_sum);
+        }
+    } else {
+        for (i = 0; i < n_pixels; ++i) {
+            average_stats(&(stats[i]));
+        }
     }
     
     fprintf (stdout, "computed.\n");
 
     // write output
-    generate_and_save(prefix, "avg", output_wand, stats, pixel_avg);
-    generate_and_save(prefix, "geoavg", output_wand, stats, pixel_geoavg);
-    generate_and_save(prefix, "min", output_wand, stats, pixel_min);
-    generate_and_save(prefix, "max", output_wand, stats, pixel_max);
-    generate_and_save(prefix, "diff", output_wand, stats, pixel_diff);
-    if (output_bins) {
-        for (i = 0; i < 16; ++i) {
-            char name[8];
-            snprintf(name, sizeof(name), "bin%02d", i);
-            selected_bin = i;
-            generate_and_save(prefix, name, output_wand, stats, pixel_bin);
+    if (output_only_amean) {
+        generate_and_save(NULL, prefix, output_wand, stats, pixel_avg);
+    } else if (output_only_gmean) {
+        generate_and_save(NULL, prefix, output_wand, stats, pixel_geoavg);
+    } else {
+        generate_and_save(prefix, "avg", output_wand, stats, pixel_avg);
+        generate_and_save(prefix, "geoavg", output_wand, stats, pixel_geoavg);
+        generate_and_save(prefix, "min", output_wand, stats, pixel_min);
+        generate_and_save(prefix, "max", output_wand, stats, pixel_max);
+        generate_and_save(prefix, "diff", output_wand, stats, pixel_diff);
+        if (output_bins) {
+            for (i = 0; i < 16; ++i) {
+                char name[8];
+                snprintf(name, sizeof(name), "bin%02d", i);
+                selected_bin = i;
+                generate_and_save(prefix, name, output_wand, stats, pixel_bin);
+            }
         }
     }
 
