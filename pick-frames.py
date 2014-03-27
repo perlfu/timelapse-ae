@@ -56,20 +56,27 @@ def pick_day_frames(frames, count):
     return result
 
 def main(args):
-    if len(args) >= 2:
-        (path, frames) = args[0:2]
+    if len(args) >= 3:
+        (path, frames, out_file) = args[0:3]
         (days, day_count) = load_day_counts(frames)
+        picked = {}
+        result = { 'days': days, 'day_count': day_count, 'picked': picked }
         errors = []
         for day in days:
             try:
                 src_frames = read_frame_list(path, day)
                 frame_sets = pick_day_frames(src_frames, day_count[day])
+                picked[day] = frame_sets
                 print day, day_count[day]
                 for (i, ls) in zip(range(len(frame_sets)), frame_sets):
                     for (f,w) in ls:
                         print "  % d %.5f %s" % (i, w, f)
             except OSError as e:
                 errors.append(day)
+        with open(out_file, 'wb') as f: 
+            data = pickle.dump(result, f)
+    else:
+        print 'pick-frames.py <path> <in-file> <out-file>'
 
 if __name__ == "__main__":
     main(sys.argv[1:])
