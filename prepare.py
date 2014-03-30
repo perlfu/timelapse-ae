@@ -362,7 +362,7 @@ def main(args):
         fp_cache_save(dst_path)
 
     else:
-        print 'avg <src> <dst>'
+        print 'prepare.py <src-path> <dst-path>'
 
 if __name__ == "__main__":
     main(sys.argv[1:])
