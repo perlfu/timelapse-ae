@@ -14,7 +14,7 @@ def render_frame(src_path, dst_path, day, srcs, n, img_type='hdn'):
         avg_srcs.append(("%.4f:" % f) + os.path.join(src_path, day, 'day', clean + '-' + img_type + '.png'))
     avg_dst = os.path.join(dst_path, 'plain-' + day + '-' + ("%03d" % n) + '.png')
     if not os.path.exists(avg_dst):
-        avg_cmd = ['avgimg', '-g', avg_dst ] + avg_srcs
+        avg_cmd = ['avgimg', '-m', avg_dst ] + avg_srcs
         print avg_cmd
         subprocess.call(avg_cmd)
     ann_dst = os.path.join(dst_path, 'annotated-' + day + '-' + ("%03d" % n) + '.png')
@@ -27,7 +27,7 @@ def render_frame(src_path, dst_path, day, srcs, n, img_type='hdn'):
                 '-annotate',    '+20%+20%', day, 
                 ann_dst ]
         print ann_cmd
-        subprocess.call(avg_cmd)
+        subprocess.call(ann_cmd)
     print 'ready', avg_dst
     print 'ready', ann_dst
 
