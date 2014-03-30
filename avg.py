@@ -163,6 +163,8 @@ def generate_base_img(dst_path, details, img_type):
         subprocess.call(['convert', src, '-scale', '600', dst])
     elif img_type == 'hd':
         subprocess.call(['convert', src, '-adaptive-resize', '1920', dst])
+    elif img_type == 'hdn':
+        subprocess.call(['convert', src, '-normalize', '-adaptive-resize', '1920', dst])
     else:
         assert(0)
     details[img_type + '_mtime'] = os.path.getmtime(dst)
@@ -173,18 +175,13 @@ def preprocess(mapping, dst):
         path = os.path.join(d['day'], d['period'])
         if not os.path.exists(os.path.join(dst, path)):
             os.makedirs(os.path.join(dst, path))
-        ld = os.path.join(path, dt_string(d['dt']) + '-ld.png')
-        hd = os.path.join(path, dt_string(d['dt']) + '-hd.png')
-        d['ld'] = ld
-        d['hd'] = hd
-        if not os.path.exists(os.path.join(dst, ld)):
-            generate_base_img(dst, d, 'ld')
-        else:
-            d['ld_mtime'] = os.path.getmtime(os.path.join(dst, ld))
-        if not os.path.exists(os.path.join(dst, hd)):
-            generate_base_img(dst, d, 'hd')
-        else:
-            d['hd_mtime'] = os.path.getmtime(os.path.join(dst, ld))
+        for img_type in ['ld', 'hd', 'hdn']:
+            img_path = os.path.join(path, dt_string(d['dt']) + '-' + img_type + '.png')
+            d[img_type] = img_path
+            if not os.path.exists(os.path.join(dst, img_path)):
+                generate_base_img(dst, d, img_type)
+            else:
+                d[img_type + '_mtime'] = os.path.getmtime(os.path.join(dst, img_path))
 
 def generate_average(dst, path, srcs, label='raw'):
     subprocess.call([AVGIMG, os.path.join(dst, path, label)] + srcs)
