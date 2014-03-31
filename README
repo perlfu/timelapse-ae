@@ -1,0 +1,19 @@
+
+Usage:
+  # preprocess all the data (hours)
+  prepare.py <src-dir> <data-dir>
+  
+  # analyse energy (60 seconds)
+  plot-measures.py <data-dir>/measures plot.pdf energy
+  
+  # decide frame counts (< 1 second)
+  map-energy.py energy geoavg-gray-edges 1440 > frames
+  
+  # pick frames to use (a few seconds)
+  pick-frames.py <data-dir> frames picks
+  
+  # render the frames (~30 minutes)
+  render-frames.py <data-dir> frames <render-dir>
+
+  # make a video (1-2 minutes)
+  avconv -r 24 -i '<render-dir>/frame-annotated-%05d.png' -vb 12000k test.mp4
