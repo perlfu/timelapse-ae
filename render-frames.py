@@ -7,17 +7,26 @@ import re
 import subprocess
 import sys
 
-def render_frame(src_path, dst_path, day, srcs, n, img_type='hdn'):
+def render_frame(src_path, dst_path, day, srcs, n, gn, img_type='hdn'):
+    # compile sources and weights
     avg_srcs = []
     for (src, f) in srcs:
         clean = src.replace("-hd.png", "")
         avg_srcs.append(("%.4f:" % f) + os.path.join(src_path, day, 'day', clean + '-' + img_type + '.png'))
+
+    # plain average frame
     avg_dst = os.path.join(dst_path, 'plain-' + day + '-' + ("%03d" % n) + '.png')
+    plain_gn = os.path.join(dst_path, "frame-plain-%05d.png" % gn)
     if not os.path.exists(avg_dst):
         avg_cmd = ['avgimg', '-m', avg_dst ] + avg_srcs
         print avg_cmd
         subprocess.call(avg_cmd)
+    if not os.path.exists(plain_gn):
+        os.symlink(avg_dst, plain_gn)
+
+    # annotated frame
     ann_dst = os.path.join(dst_path, 'annotated-' + day + '-' + ("%03d" % n) + '.png')
+    ann_gn = os.path.join(dst_path, "frame-annotated-%05d.png" % gn)
     if not os.path.exists(ann_dst):
         ann_cmd = ['convert', avg_dst, 
                 '-font',        'Bookman-Light',
@@ -28,8 +37,12 @@ def render_frame(src_path, dst_path, day, srcs, n, img_type='hdn'):
                 ann_dst ]
         print ann_cmd
         subprocess.call(ann_cmd)
-    print 'ready', avg_dst
-    print 'ready', ann_dst
+    if not os.path.exists(ann_gn):
+        os.symlink(ann_dst, ann_gn)
+
+    # output
+    print 'ready', avg_dst, plain_gn
+    print 'ready', ann_dst, ann_gn
 
 def main(args):
     if len(args) >= 3:
@@ -48,7 +61,7 @@ def main(args):
             if day in picked:
                 frame_sets = picked[day]
                 for (i, ls) in zip(range(len(frame_sets)), frame_sets):
-                    render_frame(src_path, out_path, day, ls, i, img_type=img_type)
+                    render_frame(src_path, out_path, day, ls, i, frame_n, img_type=img_type)
                     frame_n += 1
     else:
         print 'render-frames.py <src-path> <in-file> <out-path>'
