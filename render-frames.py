@@ -12,7 +12,10 @@ def render_frame(src_path, dst_path, day, srcs, n, gn, img_type='hdn'):
     avg_srcs = []
     for (src, f) in srcs:
         clean = src.replace("-hd.png", "")
-        avg_srcs.append(("%.4f:" % f) + os.path.join(src_path, day, 'day', clean + '-' + img_type + '.png'))
+        if len(srcs) <= 5:
+            avg_srcs.append(("%.4f:" % f) + os.path.join(src_path, day, 'day', clean + '-' + img_type + '.png'))
+        else:
+            avg_srcs.append(os.path.join(src_path, day, 'day', clean + '-' + img_type + '.png'))
 
     # plain average frame
     avg_dst = os.path.join(dst_path, 'plain-' + day + '-' + ("%03d" % n) + '.png')
