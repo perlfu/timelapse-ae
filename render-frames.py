@@ -8,11 +8,17 @@ import subprocess
 import sys
 
 def render_frame(src_path, dst_path, day, srcs, n, gn, img_type='hdn'):
+    # pick mode
+    if len(srcs) <= 5:
+        mode = '-m'
+    else:
+        mode = '-g'
+
     # compile sources and weights
     avg_srcs = []
     for (src, f) in srcs:
         clean = src.replace("-hd.png", "")
-        if len(srcs) <= 5:
+        if mode == '-m':
             avg_srcs.append(("%.4f:" % f) + os.path.join(src_path, day, 'day', clean + '-' + img_type + '.png'))
         else:
             avg_srcs.append(os.path.join(src_path, day, 'day', clean + '-' + img_type + '.png'))
@@ -21,7 +27,7 @@ def render_frame(src_path, dst_path, day, srcs, n, gn, img_type='hdn'):
     avg_dst = os.path.join(dst_path, 'plain-' + day + '-' + ("%03d" % n) + '.png')
     plain_gn = os.path.join(dst_path, "frame-plain-%05d.png" % gn)
     if not os.path.exists(avg_dst):
-        avg_cmd = ['avgimg', '-m', avg_dst ] + avg_srcs
+        avg_cmd = ['avgimg', mode, avg_dst ] + avg_srcs
         print avg_cmd
         subprocess.call(avg_cmd)
     if not os.path.exists(plain_gn):
