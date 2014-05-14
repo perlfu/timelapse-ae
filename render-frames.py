@@ -39,10 +39,10 @@ def render_frame(src_path, dst_path, day, srcs, n, gn, img_type='hdn'):
     if not os.path.exists(ann_dst):
         ann_cmd = ['convert', avg_dst, 
                 '-font',        'Bookman-Light',
-                '-pointsize',   '48',
+                '-pointsize',   '64',
                 '-fill',        '#ffffffa0',
-                '-gravity',     'SouthEast', 
-                '-annotate',    '+20%+20%', day, 
+                '-gravity',     'SouthWest', 
+                '-annotate',    '+1570%+20%', day, 
                 ann_dst ]
         print ann_cmd
         subprocess.call(ann_cmd)
