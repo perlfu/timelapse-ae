@@ -1,12 +1,53 @@
+timelapse-ae
+------------
+
+This is a set of script for generating an automatically eased 
+(sped up and slowed down) timelapse video based on image frames
+captured at a constant rate (e.g. one every 30 minutes) over 
+several days.  The intention is to show less frames for days
+where nothing happens with smooth (ramped) transitions in 
+playback speed.
+
+These scripts were put together to generate a timelapse of six
+months of frames showing the construction of a workshop space
+at the School of Computing at the University of Kent 
+(http://www.cs.kent.ac.uk).  However they could easily be 
+adapted to other purposes.
+
+
+Requirements:
+ * Source files with the following naming scheme: 
+    140514021632.jpg (02:16:32 on 14th May 2014)
+ * ImageMagick and development headers
+ * GCC
+ * Python
+ * numpy, scipy, matplotlib
+ * astral (https://pypi.python.org/pypi/astral/)
+ * libav or similar for encoding
+
+
+Setup:
+  1. compile avgimg
+    gcc -Wall -o avgimg `pkg-config --cflags --libs MagickWand` avgimg.c
+
+  2. put avgimg somewhere in your path
+    e.g. sudo cp avgimg /usr/local/bin
+    or export PATH=$PATH:.
+
+  3. edit main() in prepare.py to set astral location 
+
 
 Usage:
   # preprocess all the data (hours)
+  #   this is mostly iterative and can be stop and restarted
+  #   this can also be run progressively as data is added to src-dir
   prepare.py <src-dir> <data-dir>
   
   # analyse energy (60 seconds)
   plot-measures.py <data-dir>/measures plot.pdf energy
   
-  # decide frame counts (< 1 second)
+  # decide frame counts for a 1440 frame video (< 1 second)
+  #  review plot.pdf and decide which metrics provide the easing you want
   map-energy.py energy 1440 \
     geoavg-gray-edges:energy4 raw-geoavg:energy2 > frames
   
@@ -17,4 +58,17 @@ Usage:
   render-frames.py <data-dir> picks <render-dir>
 
   # make a video (1-2 minutes)
-  avconv -r 24 -i '<render-dir>/frame-annotated-%05d.png' -vb 12000k test.mp4
+  avconv -r 24 -i '<render-dir>/frame-annotated-%05d.png' \
+    -vb 12000k test.mp4
+
+
+Future work (to do list):
+ * Optimise avgimg
+ * Parallel processing
+ * Configuration:
+ ** Easing over hours or minutes, not just days
+ ** Astral location/usage
+ ** Different output sizes
+ ** Different processing options (disable some intermediates)
+
+- Carl Ritson <critson@perlfu.co.uk>
