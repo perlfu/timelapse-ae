@@ -7,7 +7,8 @@ Usage:
   plot-measures.py <data-dir>/measures plot.pdf energy
   
   # decide frame counts (< 1 second)
-  map-energy.py energy geoavg-gray-edges 1440 > frames
+  map-energy.py energy 1440 \
+    geoavg-gray-edges:energy4 raw-geoavg:energy2 > frames
   
   # pick frames to use (a few seconds)
   pick-frames.py <data-dir> frames picks
