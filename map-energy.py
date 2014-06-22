@@ -4,8 +4,6 @@ import math
 import pickle
 import sys
 
-min_f = 3
-
 def main(args):
     if len(args) >= 3:
         (data_file, frames) = args[0:2]
@@ -13,6 +11,11 @@ def main(args):
             data = pickle.load(f)
         frames = int(frames)
         days = data['days']
+
+        # ~25% of the frames are dedicated per day
+        min_f = int(math.floor((float(frames) * 0.25) / float(len(days))))
+        if min_f < 1:
+            min_f = 1
 
         selected = [ 0.0 ] * len(days)
         for measure in args[2:]:
