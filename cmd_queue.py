@@ -29,7 +29,10 @@ class CommandQueue:
                 del self.queue[k]
                 return (fn, cmd)
         return None
-    
+   
+    def sleep(self):
+        time.sleep(0.1)
+
     def start_task(self, tasks):
         job = self.next()
         if job:
@@ -41,6 +44,7 @@ class CommandQueue:
                 proc = subprocess.Popen(cmd)
                 print cmd
                 tasks[fn] = { 'p': proc, 'fn': fn, 'cmd': cmd }
+        return job
 
     def check_tasks(self, tasks):
         error = None
@@ -56,6 +60,9 @@ class CommandQueue:
             self.ready[task['fn']] = True
             del tasks[task['fn']]
 
+        if len(done) == 0:
+            self.sleep()
+
         return error
 
     def waiting(self):
@@ -64,22 +71,29 @@ class CommandQueue:
     def run(self):
         tasks = {}
         error = None
+        
+        def running():
+            return len(tasks.keys())
 
         while (self.waiting() > 0) and (not error):
-            while (len(tasks.keys()) < self.n_threads) and (self.waiting() > 0):
-                self.start_task(tasks)
-            checked = 0
+            while (running() < self.n_threads) and (self.waiting() > 0):
+                job = self.start_task(tasks)
+                # nothing to start?
+                if not job:
+                    if (running() == 0) and (self.waiting() > 0):
+                        # sanity check
+                        print 'CommandQueue has commands which cannot start'
+                        return False
+                    else:
+                        # check for dependencies finishing
+                        break
 
-            while len(tasks.keys()) == self.n_threads:
+            error = self.check_tasks(tasks)
+            while (running() == self.n_threads) and (not error):
                 error = self.check_tasks(tasks)
-                checked += 1
-                time.sleep(0.1)
-            if checked == 0:
-                time.sleep(0.1)
 
-        while len(tasks.keys()) > 0:
+        while running() > 0:
             self.check_tasks(tasks)
-            time.sleep(0.1)
 
         if error:
             print 'failed', error['cmd'] 
