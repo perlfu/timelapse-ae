@@ -9,8 +9,12 @@ import pickle
 import subprocess
 import sys
 
+from cmd_queue import CommandQueue
+cmd_queue = CommandQueue()
+
 AVGIMG = 'avgimg'
 FP_CACHE = {}
+CACHE_PATH = None
 
 def _fingerprint(path):
     print 'fingerprint', path
@@ -55,6 +59,15 @@ def fp_cache_load(path):
             data = pickle.load(f)
         for (k, fp) in FP_CACHE.items():
             FP_CACHE[os.path.join(path, k)] = fp
+
+def error_exit():
+    global CACHE_PATH
+    fp_cache_save(CACHE_PATH)
+    sys.exit(1)
+
+def flush_cmd_queue():
+    if not cmd_queue.run():
+        error_exit()
 
 def fp_tone(fp):
     s = [ 0.0, 0.0, 0.0 ]
@@ -160,17 +173,22 @@ def generate_base_img(dst_path, details, img_type):
     dst = os.path.join(dst_path, details[img_type])
     print 'generate', details[img_type]
     if img_type == 'ld':
-        subprocess.call(['convert', src, '-scale', '600', dst])
+        #subprocess.call(['convert', src, '-scale', '600', dst])
+        cmd_queue.add(dst, [src], ['convert', src, '-scale', '600', dst])
     elif img_type == 'hd':
-        subprocess.call(['convert', src, '-adaptive-resize', '1920', dst])
+        #subprocess.call(['convert', src, '-adaptive-resize', '1920', dst])
+        cmd_queue.add(dst, [src], ['convert', src, '-adaptive-resize', '1920', dst])
     elif img_type == 'hdn':
-        subprocess.call(['convert', src, '-normalize', '-adaptive-resize', '1920', dst])
+        #subprocess.call(['convert', src, '-normalize', '-adaptive-resize', '1920', dst])
+        cmd_queue.add(dst, [src], ['convert', src, '-normalize', '-adaptive-resize', '1920', dst])
     else:
         assert(0)
-    details[img_type + '_mtime'] = os.path.getmtime(dst)
+    # defer mtime load
+    #details[img_type + '_mtime'] = os.path.getmtime(dst)
     cache_invalidate(dst)
 
 def preprocess(mapping, dst):
+    to_load = []
     for (fn, d) in mapping.items():
         path = os.path.join(d['day'], d['period'])
         if not os.path.exists(os.path.join(dst, path)):
@@ -180,16 +198,30 @@ def preprocess(mapping, dst):
             d[img_type] = img_path
             if not os.path.exists(os.path.join(dst, img_path)):
                 generate_base_img(dst, d, img_type)
-            else:
-                d[img_type + '_mtime'] = os.path.getmtime(os.path.join(dst, img_path))
+            # defer mtime load
+            to_load.append((d, img_type + '_mtime', os.path.join(dst, img_path)))
+    
+    # flush processing
+    flush_cmd_queue()
+
+    # do deferred mtime loads
+    try:
+        for (d, key, path) in to_load:
+            d[key] = os.path.getmtime(path)
+    except Exception as e:
+        print e
+        error_exit()
 
 def generate_average(dst, path, srcs, label='raw'):
-    subprocess.call([AVGIMG, os.path.join(dst, path, label)] + srcs)
+    output = os.path.join(dst, path, label)
+    #subprocess.call([AVGIMG, output] + srcs)
+    cmd_queue.add(output, srcs, [AVGIMG, output] + srcs)
     for ext in ['avg', 'geoavg', 'min', 'max', 'diff']:
         cache_invalidate(os.path.join(dst, path, label + '-' + ext + '.png'))
 
 def build_averages(averages, dst, img_type='ld'):
     result = {}
+    to_load = []
     for (path, srcs) in averages.items():
         path = os.path.join('avg', path)
 
@@ -210,9 +242,22 @@ def build_averages(averages, dst, img_type='ld'):
             for src in srcs:
                 src_paths.append(os.path.join(dst, src[img_type]))
             generate_average(dst, path, src_paths)
-            mtime = os.path.getmtime(os.path.join(dst, path, 'raw-avg.png'))
+            # defer mtime load
+            #mtime = os.path.getmtime(os.path.join(dst, path, 'raw-avg.png'))
+            to_load.append((path, os.path.join(dst, path, 'raw-avg.png')))
 
         result[path] = mtime
+
+    # flush processing
+    flush_cmd_queue()
+
+    # do deferred mtime loads
+    try:
+        for (path, fpath) in to_load:
+            result[path] = os.path.getmtime(fpath)
+    except Exception as e:
+        print e
+        error_exit()
 
     return result
 
@@ -238,8 +283,11 @@ def reprocess_averages(averages, dst):
                 fpath = os.path.join(dst, path, fn)
                 if (not os.path.exists(fpath)) or (mtime > os.path.getmtime(fpath)):
                     print 'generate', os.path.join(path, fn)
-                    subprocess.call(['convert', src] + opts + [fpath])
+                    #subprocess.call(['convert', src] + opts + [fpath])
+                    cmd_queue.add(fpath, [src], ['convert', src] + opts + [fpath])
                     cache_invalidate(fpath)
+    # flush processing
+    flush_cmd_queue()
 
 def difference(src, dst):
     print 'difference', src, dst
@@ -336,6 +384,8 @@ def measure_days(days, dst_path):
     return data
 
 def main(args):
+    global CACHE_PATH
+
     aloc = astral.Astral()['London']
     # modify for University of Kent, Canterbury
     aloc.latitude = 51.275
@@ -346,6 +396,7 @@ def main(args):
         src_path = args[0]
         dst_path = args[1]
         
+        CACHE_PATH = dst_path
         files = find_files(src_path)
         fp_cache_load(dst_path)
         
