@@ -6,7 +6,7 @@ import subprocess
 import time
 
 class CommandQueue:
-    def __init__(self, n_threads=multiprocess.cpu_count()):
+    def __init__(self, n_threads=multiprocessing.cpu_count()):
         self.n_threads = n_threads
         self.ready = {}
         self.queue = {}
