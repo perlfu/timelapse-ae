@@ -59,7 +59,15 @@ Usage:
 
   # make a video (1-2 minutes)
   avconv -r 24 -i '<render-dir>/frame-annotated-%05d.png' \
-    -vb 12000k test.mp4
+    -vb 12000k render-quick.mp4
+
+  # make high quality video (~10 minutes)
+  avconv -r 24 -i '<rendir-dir>frame-annotated-%05d.png' \
+    -vb 16000k -pass 1 -profile high -preset veryslow \
+    render-hq.mp4
+  avconv -r 24 -i '<rendir-dir>frame-annotated-%05d.png' \
+    -vb 16000k -pass 2 -profile high -preset veryslow \
+    render-hq.mp4
 
 
 Future work (to do list):
