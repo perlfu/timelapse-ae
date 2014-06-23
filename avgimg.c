@@ -66,6 +66,7 @@ static inline void init_stats(pixelstat_t *p) {
 
     for (i = 0; i < 3; ++i) {
         p->sum[i] = 0.0;
+        p->gsum[i] = 0.0;
         p->min[i] = ((double)(1 << 30));
         p->max[i] = 0.0;
         for (j = 0; j < N_BINS; ++j)
