@@ -13,11 +13,11 @@ def main(args):
         days = data['days']
 
         # ~25% of the frames are dedicated per day
-        min_f = int(math.floor((float(frames) * 0.25) / float(len(days))))
-        if min_f < 1:
-            min_f = 1
+        min_f = (float(frames) * 0.25) / float(len(days))
+        if min_f < 1.0:
+            min_f = 1.0
 
-        selected = [ 0.0 ] * len(days)
+        selected = [ 1.0 ] * len(days)
         for measure in args[2:]:
             if measure.find(':') >= 0:
                 (major, minor) = measure.split(':', 2)
@@ -25,25 +25,25 @@ def main(args):
                 (major, minor) = (measure, 'energy4')
             md = data[major][minor]
             for i in range(len(md)):
-                selected[i] += md[i]
+                selected[i] *= md[i]
 
-        for i in range(len(selected)):
-            #selected[i] = selected[i] / (1.0 * len(args[2:]))
-            selected[i] = min(selected[i], 1.0)
+        #for i in range(len(selected)):
+        #    selected[i] = selected[i] / (1.0 * len(args[2:]))
+            #selected[i] = min(selected[i], 1.0)
         
-        r_frames = frames - len(days)
+        r_frames = frames - (len(days) * min_f)
         if r_frames < 0:
             print 'insufficient frames available'
             sys.exit(0)
 
-        day_frames = [ min_f ] * len(days)
+        day_frames = [ float(min_f) ] * len(days)
         total_energy = sum(selected)
 
         last_r_frames = 0
-        while not (r_frames == last_r_frames): 
+        while (not (r_frames == last_r_frames)): 
             frames_per_e = float(r_frames) / total_energy
             for i in range(len(selected)):
-                day_frames[i] += math.floor((frames_per_e * selected[i]) + 0.5)
+                day_frames[i] = math.floor(day_frames[i] + (frames_per_e * selected[i]) + 0.5)
             last_r_frames = r_frames 
             r_frames = frames - sum(day_frames)
         

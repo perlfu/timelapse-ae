@@ -49,7 +49,7 @@ Usage:
   # decide frame counts for a 1440 frame video (< 1 second)
   #  review plot.pdf and decide which metrics provide the easing you want
   map-energy.py energy 1440 \
-    geoavg-gray-edges:energy4 raw-geoavg:energy2 > frames
+    geoavg-gray-edges:energy4 raw-geoavg:energy4 > frames
   
   # pick frames to use (a few seconds)
   pick-frames.py <data-dir> frames picks
