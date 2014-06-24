@@ -12,15 +12,21 @@ cmd_queue = CommandQueue()
 def render_frame(src_path, dst_path, day, srcs, n, gn, img_type='hdn'):
     # pick mode
     if len(srcs) <= 5:
+        weighting = True
         mode = '-m'
     else:
+        weighting = False
         mode = '-g'
+
+    # always use arithmetic mean for normalised input
+    if img_type == 'hdn':
+        mode = '-m'
 
     # compile sources and weights
     avg_srcs = []
     for (src, f) in srcs:
         clean = src.replace("-hd.png", "")
-        if mode == '-m':
+        if weighting:
             avg_srcs.append(("%.4f:" % f) + os.path.join(src_path, day, 'day', clean + '-' + img_type + '.png'))
         else:
             avg_srcs.append(os.path.join(src_path, day, 'day', clean + '-' + img_type + '.png'))
