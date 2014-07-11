@@ -87,15 +87,28 @@ def rsd(a, b):
         d += (float(a[i]) - float(b[i])) ** 2
     return math.sqrt(d)
 
-def fn_to_date(fn):
-    year = int(fn[0:2]) + 2000
-    month = int(fn[2:4])
-    day = int(fn[4:6])
-    hour = int(fn[6:8])
-    minute = int(fn[8:10])
-    second = int(fn[10:12])
+def fn_to_date(fn, time_shift=None):
+    dp = (fn.split('.'))[0]
 
-    return datetime.datetime(year, month, day, hour, minute, second)
+    if len(dp) == 12:
+        year = int(fn[0:2]) + 2000
+        of = 2
+    elif len(dp) == 14:
+        year = int(fn[0:4])
+        of = 4
+    else:
+        assert(0)
+
+    month = int(fn[of:of+2])
+    day = int(fn[of+2:of+4])
+    hour = int(fn[of+4:of+6])
+    minute = int(fn[of+6:of+8])
+    second = int(fn[of+8:of+10])
+
+    result = datetime.datetime(year, month, day, hour, minute, second)
+    if time_shift:
+        result = result + time_shift
+    return result
 
 def day_period(aloc, date):
     details = aloc.sun(local=True, date=date)
@@ -125,11 +138,11 @@ def day_string(date):
 def month_string(date):
     return "%04d%02d" % (date.year, date.month)
 
-def build_mapping(aloc, src_path, dst_path, files):
+def build_mapping(aloc, src_path, dst_path, files, time_shift=None):
     mapping = {}
     average = {}
     for fn in files:
-        dt      = fn_to_date(fn)
+        dt      = fn_to_date(fn, time_shift=time_shift)
         period  = day_period(aloc, dt)
         day     = day_string(dt)
         month   = month_string(dt)
@@ -357,7 +370,7 @@ def measure_day(path, day, prev=None, img_type='geoavg-eq', period='day'):
     }
 
 def find_files(path):
-    file_re = re.compile(r'\d{12}\.jpg')
+    file_re = re.compile(r'\d{12,14}\.jpg')
     raw_files = os.listdir(path)
     files = []
     for fn in raw_files:
@@ -392,6 +405,9 @@ def main(args):
     aloc.longitude = 1.087
     aloc.elevation = 72.0
     
+    # set a constant time shift from camera data
+    time_shift = datetime.timedelta(seconds=-3600)
+    
     if len(args) == 2:
         src_path = args[0]
         dst_path = args[1]
@@ -400,7 +416,7 @@ def main(args):
         files = find_files(src_path)
         fp_cache_load(dst_path)
         
-        (mapping, averages) = build_mapping(aloc, src_path, dst_path, files)
+        (mapping, averages) = build_mapping(aloc, src_path, dst_path, files, time_shift=time_shift)
         preprocess(mapping, dst_path)
         mtimes = build_averages(averages, dst_path)
         reprocess_averages(mtimes, dst_path)
