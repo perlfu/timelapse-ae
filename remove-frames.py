@@ -31,11 +31,10 @@ def distribute_spare_frames(days, spare_f):
     output = []
     final_f = 0.0
     for (day, frames) in days:
-        # always truncate additional frames (avoid inflation)
-        frames += math.floor(((frames / total_f) * spare_f)) 
+        frames += math.floor(((frames / total_f) * spare_f) + 0.5) 
         output.append((day, frames))
         final_f += frames
-    print 'moved %d frames to produce %d final (diff %d)' % (spare_f, final_f, (total_f + spare_f) - final_f)
+    print 'moved %d frames to produce %d final (diff %d)' % (spare_f, final_f, final_f - (total_f + spare_f))
     return output
 
 def save_frames(fn, days):
